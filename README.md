@@ -9,3 +9,6 @@ Future expansions:
   Some efficiency could be achieved via classes from internal ipums metadata modules - however not sufficient, due to lack of classes handling .dat files. Could create this myself.
   Researcher requested different naming convention for output excel file and ability to specify output location
   Not currently wanted by researchers but could add functionality to handle multiple samples
+
+
+** Shared with permission **
