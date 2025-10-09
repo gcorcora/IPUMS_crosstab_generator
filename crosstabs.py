@@ -59,7 +59,7 @@ def find_name_and_year(sample_name: str) -> list[str]:
     #could turn into dict if plan to use multiple times
     #traverse to metadata and find countries
     ###########DHS SPECIFIC##############
-    country_file = '/pkg/ipums/dhs/metadata/countries.xlsx'
+    country_file = 'countries.xlsx' ##changed to mask full path
     sample_code = sample_name[0:2] #grab first two letters
     year = sample_name[2:6] #grab year
     unit_of_analysis = sample_name[6:8] #grabbing last two for unit of analysis (ir, br, kr)
@@ -307,8 +307,8 @@ def main():
     #sample_info[3] is part of excel path from countries cf
 
     #future direction: change to read in samples CF too to just grab direct path to data dict and dat
-    data_dict_excel_path = f'/pkg/ipums/dhs/{sample_info[3]}/{sample_info[1]}/data/data_dict_{sample_name}.xlsx'
-    dat_path = f'/pkg/ipums/dhs/{sample_info[3]}/{sample_info[1]}/data/{sample_name}.dat'
+    data_dict_excel_path = f'/{sample_info[3]}/{sample_info[1]}/data/data_dict_{sample_name}.xlsx' ##changed to mask full path
+    dat_path = f'/{sample_info[3]}/{sample_info[1]}/data/{sample_name}.dat' ##changed to mask full path
 
     #loading excel data dict
     try:
