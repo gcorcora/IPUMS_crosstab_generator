@@ -13,8 +13,18 @@ if [[ $# -eq 0 || "$1" == "-h" || "$1" == "--help" ]]; then
     echo ""
     echo "Usage for DHS: run_crosstabs.sh sample_name var1 [var2 ...]"
     echo "Example:"
-    echo "run_crosstabs.sh bd2018ir v025 v101 v501"
+    echo "run_crosstabs.sh bd2018ir --vars v025 v101 v501"
+    echo "run_crosstabs.sh ga2019ir bd2022ir --vars v025 v101 v501"
     echo ""
+    exit 1
+fi
+
+if [[ "$*" != *"--vars"* ]]; then
+    echo "must include --vars tag to specify variables"
+    echo ""
+    echo "Examples:"
+    echo "run_crosstabs.sh ga2019ir bd2022ir --vars v025 v101 v501"
+    echo "run_crosstabs.sh bd2018ir --vars v025 v101 v501"
     exit 1
 fi
 
