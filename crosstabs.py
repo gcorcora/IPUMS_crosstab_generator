@@ -16,15 +16,18 @@
 """
 crosstabs_test.py
 
-Written by Gretchen Corcoran, August 2025
+Written by Gretchen Corcoran, August 2025. Edited to add multiple sample functionality January 2026.
 
-Takes in a sample and a list of variables, runs crosstabs, and outputs results with labels to excel, formatted for input into translation table excel file.
+Takes in a sample (or multiple) and a list of variables, runs crosstabs, and outputs results with labels to excel, formatted for input into translation table excel file.
 
 Usage:
     python3 crosstabs.py sample_name variable variable
 
     Example:
-        python3 crosstabs.py bd2018ir v101 v501
+        python3 crosstabs.py bd2018ir --vars v101 v501
+        python3 crosstabs.py bd2018ir ga2019ir --vars v101 v501
+
+Written to work with run_crosstabs.sh bash script
 """
 
 import pandas as pd
@@ -59,7 +62,7 @@ def find_name_and_year(sample_name: str) -> list[str]:
     #could turn into dict if plan to use multiple times
     #traverse to metadata and find countries
     ###########DHS SPECIFIC##############
-    country_file = 'countries.xlsx' ##changed to mask full path
+    country_file = '/pkg/ipums/dhs/metadata/countries.xlsx'
     sample_code = sample_name[0:2] #grab first two letters
     year = sample_name[2:6] #grab year
     unit_of_analysis = sample_name[6:8] #grabbing last two for unit of analysis (ir, br, kr)
@@ -208,7 +211,7 @@ def clean_label_columns(df: pd.DataFrame, label_col:str) -> pd.Series:
     return df[label_col].fillna("").astype(str).str.strip()
 
 #including functionality so user can specify output excel path
-def generate_crosstab_combo(sample_name: str, df: pd.DataFrame, user_vars: List[str], output_excel_path: str) -> str:
+def generate_crosstab_combo(sample_name: str, df: pd.DataFrame, user_vars: List[str], writer: pd.ExcelWriter, startcol: int):
     """
     Generates crosstabs and outputs formatting in excel for input into translation tables
 
@@ -252,91 +255,105 @@ def generate_crosstab_combo(sample_name: str, df: pd.DataFrame, user_vars: List[
 
     final_df = combo_df[["codes_and_freqs"]]
 
-    with pd.ExcelWriter(output_excel_path, engine='openpyxl') as writer:
-        #First line, sample name
-        pd.DataFrame([[sample_name]]).to_excel(writer, index=False, header=False, startrow = 0)
-        #Second line, "P"
-        pd.DataFrame([['P']]).to_excel(writer, index=False, header=False, startrow=1)
-        #3 lines of blank
+    svars_dict = df.attrs.get("svars", {})
+    svars = [svars_dict.get(var, " ") for var in user_vars]
 
-        #SVARS GO HERE
-        svars_dict = df.attrs.get("svars", {})
-        svars = [svars_dict.get(var, " ") for var in user_vars] #is this really necessary? earlier we filtered, but perhaps is good to sanitize
-        pd.DataFrame([[" ".join(svars)]]).to_excel(writer, index=False, header=False, startrow=5)
+    var_labels_dict = df.attrs.get("var_labels", {})
+    var_labels = [var_labels_dict.get(var, " ") for var in user_vars]
+
+    #now edited to write a new column for each variable
+    #First line, sample name
+    pd.DataFrame([[sample_name]]).to_excel(writer, index=False, header=False, startrow = 0, startcol = startcol)
+    #Second line, "P"
+    pd.DataFrame([['P']]).to_excel(writer, index=False, header=False, startrow=1,startcol = startcol)
+    #3 lines of blank
+
+    #SVARS GO HERE
+    svars_dict = df.attrs.get("svars", {})
+    svars = [svars_dict.get(var, " ") for var in user_vars] #is this really necessary? earlier we filtered, but perhaps is good to sanitize
+    pd.DataFrame([[" ".join(svars)]]).to_excel(writer, index=False, header=False, startrow=5, startcol = startcol)
         
-        #2 lines of blank
+    #2 lines of blank
 
-        #Concatenated variables codes
-        pd.DataFrame([[" ".join(user_vars)]]).to_excel(writer, index=False, header=False, startrow=8)
+    #Concatenated variables codes
+    pd.DataFrame([[" ".join(user_vars)]]).to_excel(writer, index=False, header=False, startrow=8, startcol = startcol)
         
-        #variable labels go here
-        var_labels_dict = df.attrs.get("var_labels", {})
-        var_labels = [var_labels_dict.get(var, " ") for var in user_vars]
-        pd.DataFrame([[";".join(var_labels)]]).to_excel(writer, index=False, header=False, startrow=9)
+    #variable labels go here
+    var_labels_dict = df.attrs.get("var_labels", {})
+    var_labels = [var_labels_dict.get(var, " ") for var in user_vars]
+    pd.DataFrame([[";".join(var_labels)]]).to_excel(writer, index=False, header=False, startrow=9, startcol = startcol)
 
-        #2 lines of blank
+    #2 lines of blank
 
-        #concatenated codes + freqs
-        final_df.to_excel(writer, index = False, header=False, startrow=12)
+    #concatenated codes + freqs
+    final_df.to_excel(writer, index = False, header=False, startrow=12, startcol = startcol)
 
-    return output_excel_path
+def make_filename(samples: list[str], vars: list[str]) -> str:
+    """
+    Based on Miriam's feedback, creates custom file name based on samples+variables
+    """
+
+    samples_str = "_".join(s[:2] for s in samples) #only grabbing first two leters for shortening if lots of samples
+    vars_str = "_".join(vars)
+
+    return f"crosstabs_{samples_str}_{vars_str}.xlsx"
 
 def main():
-    parser = argparse.ArgumentParser(
-        description = "Generate crosstabs on specified variables"
-    )
-    parser.add_argument("sample_name", help = "Name of the DHS sample (e.g., bd2018ir)")
-    parser.add_argument("variable_names", nargs = "+", help = "List of variable names to include in crosstab")
+    parser = argparse.ArgumentParser(description = "Generate crosstabs on specified variables for single or multiple DHS samples")
+    parser.add_argument("sample_names", nargs="+", help = "Names of one or more DHS samples (e.g., bd2018ir ga2019ir)")
+    parser.add_argument("--vars", nargs = "+", required=True, help = "List of variable names to include in crosstab, must include --vars, e.g., (--vars v001 v002)")
 
     args = parser.parse_args()
 
-    sample_name = args.sample_name.lower()
-    variable_names = args.variable_names
-    variable_names =[var.lower() for var in args.variable_names]
+    #set variables from parser arguments
 
-    try:
-        ##find the data dictionary and the .dat file
-        #step one, grab the meaning of the the two letter code
-        sample_info = find_name_and_year(sample_name) #list with country_name, year, unit of analysis
-    except Exception as e:
-        print(f'find_name_and_year from sample failed. Did you type the sample abbreviation correctly? {sample_name}')
-        print(f'More error text: {e}')
-        sys.exit(1)
+    sample_names = [sample.lower() for sample in args.sample_names]
+    variable_names =[var.lower() for var in args.vars]
 
-    #now that we have the sample info, we can grab the data dictionary and .dat files!
-    #sample_info[3] is part of excel path from countries cf
+    #note: output dir doesn't need to be in loop
+    output_excel_path = os.path.join(os.getcwd(), make_filename(sample_names, variable_names))
 
-    #future direction: change to read in samples CF too to just grab direct path to data dict and dat
-    data_dict_excel_path = f'/{sample_info[3]}/{sample_info[1]}/data/data_dict_{sample_name}.xlsx' ##changed to mask full path
-    dat_path = f'/{sample_info[3]}/{sample_info[1]}/data/{sample_name}.dat' ##changed to mask full path
+    #any samples that failed
+    failed = []
 
-    #loading excel data dict
-    try:
-        colspecs, var_name_labels, values_dict_lookups, svars = load_data_dict(data_dict_excel_path, variable_names)
-    except Exception as e:
-        print(f'Failed to load {data_dict_excel_path}; {e}')
-        #if failed to load files
-        sys.exit(1)
+    with pd.ExcelWriter(output_excel_path, engine="openpyxl") as writer:
+        for start_col, sample in enumerate(sample_names):
+            try:
+                ##find the data dictionary and the .dat file
+                #step one, grab the meaning of the the two letter code
+                
+                sample_info = find_name_and_year(sample) #list with country_name, year, unit of analysis
+
+                #now that we have the sample info, we can grab the data dictionary and .dat files!
+                #sample_info[3] is part of excel path from countries cf
+
+                #future direction: change to read in samples CF too to just grab direct path to data dict and dat
+
+                #loading excel data dict
+                data_dict_excel_path = f'/pkg/ipums/dhs/{sample_info[3]}/{sample_info[1]}/data/data_dict_{sample}.xlsx'
+                #loading fixed_width data
+                dat_path = f'/pkg/ipums/dhs/{sample_info[3]}/{sample_info[1]}/data/{sample}.dat'
+
+                colspecs, var_name_labels, values_dict_lookups, svars = load_data_dict(data_dict_excel_path, variable_names)
+                df = load_microdata(dat_path, colspecs, var_name_labels, values_dict_lookups, svars)
+
+                #if that all worked, then generate a crosstab
+                generate_crosstab_combo(sample_name = sample, df = df, user_vars = variable_names, writer = writer, startcol = start_col) #could edit to start row if interested
+
+                print(f'{sample} written to column number {start_col}')
+
+            except Exception as e:
+                failed.append((sample, str(e)))
+                print(f'{sample} failed to write due to error {e}')
+
+
+    print(f"\n output written to {output_excel_path}")
     
-    #loading fixed_width data
-    try:
-        df = load_microdata(dat_path, colspecs, var_name_labels, values_dict_lookups, svars)
-
-    except Exception as e:
-        print(f'Failed to load .dat file {dat_path}; {e}')
-        sys.exit(1)
-
-    #if that all worked, then generate a crosstab
-    try:
-        #generate crosstab
-        output_dir = os.getcwd()
-        output_path = os.path.join(output_dir, f'{sample_name}_crosstab.xlsx')
-
-        excel_output_path = generate_crosstab_combo(sample_name, df, variable_names, output_path)
-        print(f'Output written to: {excel_output_path}')
-
-    except Exception as e:
-        print(f'Failed to generate crosstab; {e}')
+    #then print failures
+    if failed:
+        print("list of samples that failed and didn't generate crosstabs:")
+        for sample, error in failed:
+            print(f" {sample}: {error}")
         sys.exit(1)
 
     #is there a way to utilize .pipe() to make this easier/more efficeint?
